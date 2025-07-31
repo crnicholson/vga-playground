@@ -1,0 +1,18 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Launch VGA Simulator Extension",
+			"type": "shell",
+			"command": "code",
+			"args": [
+				"--extensionDevelopmentPath",
+				"${workspaceFolder}/vscode-extension",
+				"${workspaceFolder}/vscode-extension/examples"
+			],
+			"group": "test",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

@@ -1,0 +1,89 @@
+{
+    "name": "vga-simulator",
+    "displayName": "VGA Verilog Simulator",
+    "description": "Real-time VGA simulation for Verilog projects with live visual output",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.74.0"
+    },
+    "categories": [
+        "Other",
+        "Visualization"
+    ],
+    "activationEvents": [
+        "onLanguage:verilog",
+        "onLanguage:systemverilog"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "vgaSimulator.openSimulator",
+                "title": "Open VGA Simulator",
+                "category": "VGA"
+            },
+            {
+                "command": "vgaSimulator.simulate",
+                "title": "Simulate Current File",
+                "category": "VGA"
+            },
+            {
+                "command": "vgaSimulator.loadExamples",
+                "title": "Load VGA Examples",
+                "category": "VGA"
+            }
+        ],
+        "menus": {
+            "editor/context": [
+                {
+                    "when": "resourceExtname == .v || resourceExtname == .sv",
+                    "command": "vgaSimulator.simulate",
+                    "group": "navigation"
+                }
+            ],
+            "editor/title": [
+                {
+                    "when": "resourceExtname == .v || resourceExtname == .sv",
+                    "command": "vgaSimulator.openSimulator",
+                    "group": "navigation"
+                }
+            ]
+        },
+        "keybindings": [
+            {
+                "command": "vgaSimulator.simulate",
+                "key": "ctrl+shift+v",
+                "mac": "cmd+shift+v",
+                "when": "resourceExtname == .v || resourceExtname == .sv"
+            }
+        ],
+        "configuration": {
+            "title": "VGA Simulator",
+            "properties": {
+                "vgaSimulator.autoUpdate": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically update simulation when file changes"
+                },
+                "vgaSimulator.framerate": {
+                    "type": "number",
+                    "default": 60,
+                    "description": "Simulation framerate (FPS)"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.74.0",
+        "@types/node": "16.x",
+        "typescript": "^4.9.4"
+    },
+    "dependencies": {
+        "binaryen": "^117.0.0"
+    }
+}
