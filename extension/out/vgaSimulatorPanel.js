@@ -1,97 +1,72 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-
-export class VGASimulatorPanel {
-    public static currentPanel: VGASimulatorPanel | undefined;
-    public static readonly viewType = 'vgaSimulator';
-
-    private readonly _panel: vscode.WebviewPanel;
-    private readonly _extensionUri: vscode.Uri;
-    private _disposables: vscode.Disposable[] = [];
-    private _isRunning: boolean = false;
-    private _currentCode: string = '';
-
-    public static createOrShow(extensionUri: vscode.Uri) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.VGASimulatorPanel = void 0;
+const vscode = require("vscode");
+class VGASimulatorPanel {
+    static createOrShow(extensionUri) {
         const column = vscode.window.activeTextEditor
             ? vscode.ViewColumn.Beside
             : undefined;
-
         if (VGASimulatorPanel.currentPanel) {
             VGASimulatorPanel.currentPanel._panel.reveal(column);
             return;
         }
-
-        const panel = vscode.window.createWebviewPanel(
-            VGASimulatorPanel.viewType,
-            'VGA Simulator',
-            column || vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                localResourceRoots: [
-                    vscode.Uri.joinPath(extensionUri, 'media'),
-                    vscode.Uri.joinPath(extensionUri, 'out', 'compiled')
-                ]
-            }
-        );
-
+        const panel = vscode.window.createWebviewPanel(VGASimulatorPanel.viewType, 'VGA Simulator', column || vscode.ViewColumn.One, {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(extensionUri, 'media'),
+                vscode.Uri.joinPath(extensionUri, 'out', 'compiled')
+            ]
+        });
         VGASimulatorPanel.currentPanel = new VGASimulatorPanel(panel, extensionUri);
     }
-
-    public static simulate() {
+    static simulate() {
         if (VGASimulatorPanel.currentPanel) {
             VGASimulatorPanel.currentPanel._simulate();
         }
     }
-
-    public static reset() {
+    static reset() {
         if (VGASimulatorPanel.currentPanel) {
             VGASimulatorPanel.currentPanel._reset();
         }
     }
-
-    public static updateCode(code: string) {
+    static updateCode(code) {
         if (VGASimulatorPanel.currentPanel) {
             VGASimulatorPanel.currentPanel._updateCode(code);
         }
     }
-
-    public static dispose() {
+    static dispose() {
         if (VGASimulatorPanel.currentPanel) {
             VGASimulatorPanel.currentPanel.dispose();
         }
     }
-
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+    constructor(panel, extensionUri) {
+        this._disposables = [];
+        this._isRunning = false;
+        this._currentCode = '';
         this._panel = panel;
         this._extensionUri = extensionUri;
-
         this._update();
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-
-        this._panel.webview.onDidReceiveMessage(
-            message => {
-                switch (message.type) {
-                    case 'simulate':
-                        this._simulate();
-                        return;
-                    case 'reset':
-                        this._reset();
-                        return;
-                    case 'codeChange':
-                        this._currentCode = message.code;
-                        this._compileAndRun();
-                        return;
-                    case 'selectExample':
-                        this._loadExample(message.example);
-                        return;
-                }
-            },
-            null,
-            this._disposables
-        );
+        this._panel.webview.onDidReceiveMessage(message => {
+            switch (message.type) {
+                case 'simulate':
+                    this._simulate();
+                    return;
+                case 'reset':
+                    this._reset();
+                    return;
+                case 'codeChange':
+                    this._currentCode = message.code;
+                    this._compileAndRun();
+                    return;
+                case 'selectExample':
+                    this._loadExample(message.example);
+                    return;
+            }
+        }, null, this._disposables);
     }
-
-    public dispose() {
+    dispose() {
         VGASimulatorPanel.currentPanel = undefined;
         this._panel.dispose();
         while (this._disposables.length) {
@@ -101,49 +76,43 @@ export class VGASimulatorPanel {
             }
         }
     }
-
-    private _simulate() {
+    _simulate() {
         this._isRunning = true;
         this._panel.webview.postMessage({ type: 'startSimulation' });
         this._compileAndRun();
     }
-
-    private _reset() {
+    _reset() {
         this._isRunning = false;
         this._panel.webview.postMessage({ type: 'resetSimulation' });
     }
-
-    private _updateCode(code: string) {
+    _updateCode(code) {
         this._currentCode = code;
         this._panel.webview.postMessage({ type: 'updateCode', code });
     }
-
-    private _compileAndRun() {
-        if (!this._isRunning) return;
-
+    _compileAndRun() {
+        if (!this._isRunning)
+            return;
         // Here you would integrate with your Verilog simulator
         // For now, we'll send the code to the webview for processing
-        this._panel.webview.postMessage({ 
-            type: 'compileAndRun', 
-            code: this._currentCode 
+        this._panel.webview.postMessage({
+            type: 'compileAndRun',
+            code: this._currentCode
         });
     }
-
-    private _loadExample(exampleName: string) {
+    _loadExample(exampleName) {
         // Load example Verilog code
         const examples = this._getExamples();
         const example = examples[exampleName];
         if (example) {
             this._currentCode = example;
-            this._panel.webview.postMessage({ 
-                type: 'loadExample', 
+            this._panel.webview.postMessage({
+                type: 'loadExample',
                 code: example,
                 name: exampleName
             });
         }
     }
-
-    private _getExamples(): { [key: string]: string } {
+    _getExamples() {
         return {
             'stripes': `/*
  * Copyright (c) 2024 Uri Shaked
@@ -309,20 +278,13 @@ module tt_um_vga_example(
 endmodule`
         };
     }
-
-    private _update() {
+    _update() {
         const webview = this._panel.webview;
         this._panel.webview.html = this._getHtmlForWebview(webview);
     }
-
-    private _getHtmlForWebview(webview: vscode.Webview) {
-        const scriptUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'vgaSimulator.js')
-        );
-        const styleUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'vgaSimulator.css')
-        );
-
+    _getHtmlForWebview(webview) {
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vgaSimulator.js'));
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'vgaSimulator.css'));
         return `<!DOCTYPE html>
         <html lang="en">
         <head>
@@ -376,3 +338,6 @@ endmodule`
         </html>`;
     }
 }
+exports.VGASimulatorPanel = VGASimulatorPanel;
+VGASimulatorPanel.viewType = 'vgaSimulator';
+//# sourceMappingURL=vgaSimulatorPanel.js.map
