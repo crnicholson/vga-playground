@@ -1,56 +1,154 @@
-(function() {
+(async function () {
     const vscode = acquireVsCodeApi();
+
     const canvas = document.getElementById('vgaCanvas');
     const ctx = canvas.getContext('2d');
-    
     const simulateBtn = document.getElementById('simulateBtn');
     const resetBtn = document.getElementById('resetBtn');
-    const exampleSelect = document.getElaementById('exampleSelect');
+    const exampleSelect = document.getElementById('exampleSelect');
     const statusEl = document.getElementById('status');
     const fpsEl = document.getElementById('fps');
     const clockEl = document.getElementById('clock');
     const frameEl = document.getElementById('frame');
     const resolutionEl = document.getElementById('resolution');
     const simStatusEl = document.getElementById('simStatus');
-    
-    let isRunning = false;
-    let animationFrame;
-    let frameCount = 0;
-    let lastFrameTime = 0;
-    let fps = 60;
-    let clockCount = 0;
-    
+
     const VGA_WIDTH = 640;
     const VGA_HEIGHT = 480;
-    const PIXEL_CLOCK = 25175000;
-    
+    let isRunning = false;
     let currentCode = '';
-    
+    let frameCount = 0;
+    let clockCount = 0;
+    let fps = 0;
+    let lastTime = performance.now();
+
     canvas.width = VGA_WIDTH;
     canvas.height = VGA_HEIGHT;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, VGA_WIDTH, VGA_HEIGHT);
-    
+
+    // ================================
+    // WASM Loader
+    // ================================
+    const wasmUri = window.wasmUri;
+    let verilatorModule;
+
+    function loadVerilator() {
+        return new Promise((resolve, reject) => {
+            fetch(wasmUri)
+                .then(r => r.arrayBuffer())
+                .then(bytes => WebAssembly.instantiate(bytes, {
+                    env: {
+                        abort: () => console.error("WASM abort"),
+                        emscripten_notify_memory_growth: () => { },
+                    }
+                }))
+                .then(result => {
+                    const instance = result.instance;
+                    const memory = instance.exports.memory;
+                    resolve({ instance, memory });
+                })
+                .catch(reject);
+        });
+    }
+
+    verilatorModule = await loadVerilator();
+
+    // ================================
+    // Fake FS for Verilog code
+    // ================================
+    const textEncoder = new TextEncoder();
+    const FS = {
+        files: {},
+        writeFile: (path, data) => {
+            FS.files[path] = (data instanceof Uint8Array) ? data : textEncoder.encode(data);
+        },
+        readFile: (path) => {
+            return FS.files[path] || null;
+        }
+    };
+
+    // ================================
+    // Simulation Control
+    // ================================
+    function compileAndRun(code) {
+        currentCode = code;
+        statusEl.textContent = "Compiling Verilog...";
+        FS.writeFile("/tmp/design.v", code);
+
+        // Normally we'd call into verilator compile here
+        if (verilatorModule.instance.exports.load_design) {
+            verilatorModule.instance.exports.load_design();
+        }
+
+        statusEl.textContent = "Running simulation...";
+    }
+
+    function renderFrame() {
+        const ptr = verilatorModule.instance.exports.framebuffer_ptr();
+        const memory = new Uint8Array(verilatorModule.memory.buffer, ptr, VGA_WIDTH * VGA_HEIGHT * 2);
+
+        const imageData = ctx.createImageData(VGA_WIDTH, VGA_HEIGHT);
+        const data = imageData.data;
+
+        let di = 0;
+        for (let i = 0; i < memory.length; i += 2) {
+            const value = memory[i] | (memory[i + 1] << 8); // RGB565
+            const r = ((value >> 11) & 0x1F) << 3;
+            const g = ((value >> 5) & 0x3F) << 2;
+            const b = (value & 0x1F) << 3;
+            data[di++] = r;
+            data[di++] = g;
+            data[di++] = b;
+            data[di++] = 255;
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        if (verilatorModule.instance.exports.step_frame) {
+            verilatorModule.instance.exports.step_frame();
+        }
+    }
+
+    function animate() {
+        if (!isRunning) return;
+        const now = performance.now();
+        const delta = now - lastTime;
+        if (delta >= 1000 / 60) {
+            renderFrame();
+            frameCount++;
+            fps = Math.round(1000 / delta);
+            clockCount += VGA_WIDTH * VGA_HEIGHT;
+            lastTime = now;
+            updateInfo();
+        }
+        requestAnimationFrame(animate);
+    }
+
+    function updateInfo() {
+        fpsEl.textContent = fps;
+        clockEl.textContent = clockCount.toLocaleString();
+        frameEl.textContent = frameCount;
+        resolutionEl.textContent = `${VGA_WIDTH}x${VGA_HEIGHT}`;
+    }
+
+    // ================================
+    // Webview Events
+    // ================================
     simulateBtn.addEventListener('click', () => {
-        vscode.postMessage({ type: 'simulate' });
+        vscode.postMessage({ type: 'simulate', code: currentCode });
     });
-    
+
     resetBtn.addEventListener('click', () => {
         vscode.postMessage({ type: 'reset' });
     });
-    
+
     exampleSelect.addEventListener('change', (e) => {
         if (e.target.value) {
-            vscode.postMessage({ 
-                type: 'selectExample', 
-                example: e.target.value 
-            });
+            vscode.postMessage({ type: 'selectExample', example: e.target.value });
         }
     });
-    
+
     window.addEventListener('message', event => {
         const message = event.data;
-        
         switch (message.type) {
             case 'startSimulation':
                 startSimulation();
@@ -65,176 +163,36 @@
                 compileAndRun(message.code);
                 break;
             case 'loadExample':
-                loadExample(message.code, message.name);
+                currentCode = message.code;
+                exampleSelect.value = message.name;
+                compileAndRun(currentCode);
                 break;
         }
     });
-    
+
+    // ================================
+    // Start/Stop Simulation
+    // ================================
     function startSimulation() {
         if (isRunning) return;
-        
         isRunning = true;
         frameCount = 0;
         clockCount = 0;
-        lastFrameTime = performance.now();
-        
-        simulateBtn.textContent = 'Running';
+        simStatusEl.textContent = "Running";
         simulateBtn.disabled = true;
-        simStatusEl.textContent = 'Running';
-        simStatusEl.className = 'value running';
-        fpsEl.className = 'value running';
-        statusEl.textContent = 'VGA simulation started! You should see output on the display.';
-        
+        statusEl.textContent = "VGA simulation started";
         animate();
     }
-    
+
     function resetSimulation() {
         isRunning = false;
-        frameCount = 0;
-        clockCount = 0;
-        
-        if (animationFrame) {
-            cancelAnimationFrame(animationFrame);
-        }
-        
-        simulateBtn.textContent = 'Simulate';
         simulateBtn.disabled = false;
-        simStatusEl.textContent = 'Idle';
-        simStatusEl.className = 'value';
-        fpsEl.className = 'value';
-        statusEl.textContent = 'Ready';
-        
-        ctx.fillStyle = '#000';
+        simStatusEl.textContent = "Idle";
+        statusEl.textContent = "Ready";
+        ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, VGA_WIDTH, VGA_HEIGHT);
-        
         updateInfo();
     }
-    
-    function compileAndRun(code) {
-        currentCode = code;
-        if (isRunning) {
-            statusEl.textContent = 'Code updated, simulation continuing...';
-        }
-    }
-    
-    function loadExample(code, name) {
-        currentCode = code;
-        exampleSelect.value = name;
-        statusEl.textContent = `Loaded example: ${name}`;
-    }
-    
-    function animate() {
-        if (!isRunning) return;
-        
-        const currentTime = performance.now();
-        const deltaTime = currentTime - lastFrameTime;
-        
-        if (deltaTime >= 1000 / 60) {
-            renderFrame();
-            frameCount++;
-            lastFrameTime = currentTime;
-            
-            if (frameCount % 60 === 0) {
-                fps = Math.round(1000 / deltaTime);
-                updateInfo();
-            }
-        }
-        
-        animationFrame = requestAnimationFrame(animate);
-    }
-    
-    function renderFrame() {
-        const imageData = ctx.createImageData(VGA_WIDTH, VGA_HEIGHT);
-        const data = imageData.data;
-        
-        if (currentCode.includes('stripes') || currentCode.includes('pix_x[4:3]')) {
-            renderStripes(data);
-        } else if (currentCode.includes('checker') || currentCode.includes('pix_x[5] ^ pix_y[5]')) {
-            renderCheckerboard(data);
-        } else {
-            renderDefault(data);
-        }
-        
-        ctx.putImageData(imageData, 0, 0);
-        clockCount += VGA_WIDTH * VGA_HEIGHT;
-    }
-    
-    function renderStripes(data) {
-        for (let y = 0; y < VGA_HEIGHT; y++) {
-            for (let x = 0; x < VGA_WIDTH; x++) {
-                const index = (y * VGA_WIDTH + x) * 4;
-                
-                const r = ((x >> 3) & 3) * 85;
-                const g = ((x >> 5) & 3) * 85; 
-                const b = ((x >> 7) & 3) * 85;
-                
-                data[index] = r;
-                data[index + 1] = g;
-                data[index + 2] = b;
-                data[index + 3] = 255;
-            }
-        }
-    }
-    
-    function renderCheckerboard(data) {
-        for (let y = 0; y < VGA_HEIGHT; y++) {
-            for (let x = 0; x < VGA_WIDTH; x++) {
-                const index = (y * VGA_WIDTH + x) * 4;
-                
-                const checker = ((x >> 5) ^ (y >> 5)) & 1;
-                const color = checker ? 255 : 0;
-                
-                data[index] = color;
-                data[index + 1] = color;
-                data[index + 2] = color;
-                data[index + 3] = 255;
-            }
-        }
-    }
-    
-    function renderDefault(data) {
-        for (let y = 0; y < VGA_HEIGHT; y++) {
-            for (let x = 0; x < VGA_WIDTH; x++) {
-                const index = (y * VGA_WIDTH + x) * 4;
-                
-                const r = (x / VGA_WIDTH) * 255;
-                const g = (y / VGA_HEIGHT) * 255;
-                const b = 128;
-                
-                data[index] = r;
-                data[index + 1] = g;
-                data[index + 2] = b;
-                data[index + 3] = 255;
-            }
-        }
-    }
-    
-    function updateInfo() {
-        fpsEl.textContent = fps;
-        clockEl.textContent = clockCount.toLocaleString();
-        frameEl.textContent = frameCount;
-        resolutionEl.textContent = `${VGA_WIDTH}x${VGA_HEIGHT}`;
-    }
-    
+
     updateInfo();
-    
-    window.addEventListener('resize', () => {
-        const container = document.querySelector('.simulator-container');
-        const containerRect = container.getBoundingClientRect();
-        const aspectRatio = VGA_WIDTH / VGA_HEIGHT;
-        
-        let newWidth = containerRect.width - 20;
-        let newHeight = newWidth / aspectRatio;
-        
-        if (newHeight > containerRect.height - 20) {
-            newHeight = containerRect.height - 20;
-            newWidth = newHeight * aspectRatio;
-        }
-        
-        canvas.style.width = `${newWidth}px`;
-        canvas.style.height = `${newHeight}px`;
-    });
-    
-    window.dispatchEvent(new Event('resize'));
-    
 })();
