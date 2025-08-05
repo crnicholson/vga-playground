@@ -1,15 +1,15 @@
-// VGA Simulator UI logic
-(function () {
-  const vscode       = acquireVsCodeApi();
-  const canvas       = document.getElementById('vgaCanvas');
-  const ctx          = canvas.getContext('2d');
-  const statusEl     = document.getElementById('status');
-  const fpsEl        = document.getElementById('fps');
-  const frameEl      = document.getElementById('frame');
-  const clockEl      = document.getElementById('clock');
-  const simulateBtn  = document.getElementById('simulateBtn');
-  const resetBtn     = document.getElementById('resetBtn');
-  const exampleSelect= document.getElementById('exampleSelect');
+// Pure-JS simulator UI logic, relies on window.compileVerilator & window.HDLModuleWASM
+;(function() {
+  const vscode        = acquireVsCodeApi();
+  const canvas        = document.getElementById('vgaCanvas');
+  const ctx           = canvas.getContext('2d');
+  const statusEl      = document.getElementById('status');
+  const fpsEl         = document.getElementById('fps');
+  const frameEl       = document.getElementById('frame');
+  const clockEl       = document.getElementById('clock');
+  const simulateBtn   = document.getElementById('simulateBtn');
+  const resetBtn      = document.getElementById('resetBtn');
+  const exampleSelect = document.getElementById('exampleSelect');
 
   const VGA_WIDTH  = 640, VGA_HEIGHT = 480;
 
@@ -66,10 +66,17 @@
     console.log('runSimulation, code length:', code.length);
     statusEl.textContent = 'Compiling…';
     try {
-      const Module = await window.compileVerilator();
+      const sources = { 'design.v': code };
+
+      // ✅ Explicitly tell Verilator which file to compile
+      const { module, ast } = await window.compileVerilator({
+        sources,
+        files: ['design.v']
+      });
+
       console.log('Compiled, instantiating HDLModuleWASM');
-      hdl = new window.HDLModuleWASM(Module);
-      if (hdl.init) hdl.init(code, VGA_WIDTH, VGA_HEIGHT);
+      hdl = new window.HDLModuleWASM(module, ast, VGA_WIDTH, VGA_HEIGHT);
+      hdl.init();
       statusEl.textContent = 'Simulation started';
       frameCount = clockCount = 0;
       lastTime = performance.now();
@@ -84,10 +91,8 @@
     if (!hdl) return;
     const dt = now - lastTime;
     if (dt >= 1000 / 60) {
-      if (hdl.stepFrameAndGetBuffer) {
-        const buf = hdl.stepFrameAndGetBuffer();
-        ctx.putImageData(new ImageData(buf, VGA_WIDTH, VGA_HEIGHT), 0, 0);
-      }
+      const buf = hdl.stepFrameAndGetBuffer();
+      ctx.putImageData(new ImageData(buf, VGA_WIDTH, VGA_HEIGHT), 0, 0);
       frameCount++;
       clockCount += VGA_WIDTH * VGA_HEIGHT;
       fpsEl.textContent   = Math.round(1000 / dt);
