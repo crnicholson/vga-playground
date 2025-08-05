@@ -1,23 +1,19 @@
-// loader that wraps the TinyTapeout-verilator runtime
-export async function compileVerilator(moduleUrl, sources) {
-  // load the Emscripten runtime JS
-  await import(moduleUrl); // attaches global Module
-  await Module.ready; // wait until Emscripten module initialized
+window.compileVerilator = async function () {
+  console.log("Loading Verilator module from", window.veriUri);
 
-  // write verilog into FS
-  for (const [filename, text] of Object.entries(sources)) {
-    Module.FS.writeFile(filename, text);
-  }
+  // Dynamically import Emscripten JS as an ES module
+  const verilatorModule = await import(window.veriUri);
+  console.log("Verilator JS imported, now instantiating with WASM at", window.wasmUri);
 
-  // compile design
-  Module.load_design();
-  Module.emit_xml_ast();
-  const xmlPtr = Module.get_xml_ast_ptr();
-  const xmlLen = Module.get_xml_ast_length();
-  const xml = new TextDecoder().decode(
-    new Uint8Array(Module.HEAPU8.buffer, xmlPtr, xmlLen)
-  );
+  const Module = await verilatorModule.default({
+    locateFile: (path) => {
+      if (path.endsWith('.wasm')) {
+        console.log("Redirecting WASM load to", window.wasmUri);
+        return window.wasmUri;
+      }
+      return path;
+    }
+  });
 
-  const ast = Module.parseXmlAST(xml);
-  return { module: Module, ast };
-}
+  return Module;
+};
