@@ -2,41 +2,18 @@ import * as vscode from 'vscode';
 import { VGASimulatorPanel } from './vgaSimulatorPanel';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('VGA Playground extension is now active!');
-
-    // Register command to open VGA simulator
-    const openSimulatorCommand = vscode.commands.registerCommand('vga-playground.openSimulator', () => {
-        VGASimulatorPanel.createOrShow(context.extensionUri);
-    });
-
-    // Register command to simulate
-    const simulateCommand = vscode.commands.registerCommand('vga-playground.simulate', () => {
-        VGASimulatorPanel.simulate();
-    });
-
-    // Register command to reset
-    const resetCommand = vscode.commands.registerCommand('vga-playground.reset', () => {
-        VGASimulatorPanel.reset();
-    });
-
-    context.subscriptions.push(openSimulatorCommand, simulateCommand, resetCommand);
-
-    // Auto-open simulator when opening .v files
-    vscode.workspace.onDidOpenTextDocument((document) => {
-        if (document.languageId === 'verilog') {
-            // Optional: auto-open simulator
-            // VGASimulatorPanel.createOrShow(context.extensionUri);
-        }
-    });
-
-    // Watch for changes in Verilog files
-    vscode.workspace.onDidChangeTextDocument((event) => {
-        if (event.document.languageId === 'verilog') {
-            VGASimulatorPanel.updateCode(event.document.getText());
-        }
-    });
+  const openSimulator = vscode.commands.registerCommand('vga-playground.openSimulator', () => {
+    VGASimulatorPanel.createOrShow(context.extensionUri);
+  });
+  const simulateCmd = vscode.commands.registerCommand('vga-playground.simulate', () => {
+    VGASimulatorPanel.simulate();
+  });
+  const resetCmd = vscode.commands.registerCommand('vga-playground.reset', () => {
+    VGASimulatorPanel.reset();
+  });
+  context.subscriptions.push(openSimulator, simulateCmd, resetCmd);
 }
 
 export function deactivate() {
-    VGASimulatorPanel.dispose();
+  VGASimulatorPanel.dispose();
 }

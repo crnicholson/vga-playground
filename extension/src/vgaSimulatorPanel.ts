@@ -14,7 +14,7 @@ export class VGASimulatorPanel {
     updateCurrentCode() {
         const editor = vscode.window.activeTextEditor;
         if (editor) {
-        this._currentCode = editor.document.getText();
+            this._currentCode = editor.document.getText();
         }
     }
 
@@ -72,8 +72,20 @@ export class VGASimulatorPanel {
         this._panel = panel;
         this._extensionUri = extensionUri;
 
+        const editor = vscode.window.activeTextEditor;
+        if (editor && editor.document.languageId === 'verilog') {
+            this._currentCode = editor.document.getText();
+        }
+
         this._update();
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+        setTimeout(() => {
+            this._panel.webview.postMessage({ 
+                type: 'updateCode', 
+                code: this._currentCode 
+            });
+        }, 100);
 
         this._panel.webview.onDidReceiveMessage(
             async message => {
@@ -159,11 +171,8 @@ export class VGASimulatorPanel {
 
     private _getExamples(): { [key: string]: string } {
         return {
-            'stripes': `// Verilog stripes pattern
-\`default_nettype none
-module top(...); /* full stripes code here */ endmodule`,
-            'checkerboard': `// Verilog checkerboard pattern
-module top(...); /* full checkerboard code here */ endmodule`
+            'stripes': `// Verilog stripes pattern\n\`default_nettype none\nmodule top(...); /* full stripes code here */ endmodule`,
+            'checkerboard': `// Verilog checkerboard pattern\nmodule top(...); /* full checkerboard code here */ endmodule`
         };
     }
 
