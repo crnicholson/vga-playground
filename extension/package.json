@@ -1,0 +1,89 @@
+{
+  "name": "vga-simulator",
+  "displayName": "VGA Simulator",
+  "description": "A VGA simulator for Verilog HDL development with real-time visualization",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vga-simulator.openSimulator",
+        "title": "Open VGA Simulator",
+        "category": "VGA Simulator"
+      },
+      {
+        "command": "vga-simulator.simulate",
+        "title": "Simulate VGA",
+        "category": "VGA Simulator"
+      },
+      {
+        "command": "vga-simulator.reset",
+        "title": "Reset VGA Simulation",
+        "category": "VGA Simulator"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "vga-simulator.openSimulator"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "vga-simulator.openSimulator",
+          "when": "editorLangId == verilog",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vga-simulator",
+          "title": "VGA Simulator",
+          "icon": "resources/vga-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "vga-simulator": [
+        {
+          "id": "vga-simulator-view",
+          "name": "VGA Simulator"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "verilog",
+        "aliases": ["Verilog", "verilog"],
+        "extensions": [".v", ".vh", ".sv", ".svi"],
+        "configuration": "./language-configuration.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "16.x",
+    "@types/mocha": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^6.2.1",
+    "@typescript-eslint/parser": "^6.2.1",
+    "eslint": "^8.45.0",
+    "typescript": "^5.1.6",
+    "@vscode/test-electron": "^2.3.8"
+  }
+} 
